@@ -1,0 +1,221 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>Register Drug</title>
+    <meta charset="utf-8" />
+    <link href="css/bootstrap.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
+    <style>
+        .loading {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 9999;
+        }
+        .loading-spinner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading" id="loading">
+        <div class="loading-spinner">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Processing Transaction...</p>
+        </div>
+    </div>
+
+    <div id="metamask" class="alert" style="display: none;"></div>
+    <div class="container">
+        <div class="row">
+            <div class="col-md-12 p-4">
+                <h1 class="text-center mb-4">Drug Registration Portal</h1>
+                <div class="card shadow">
+                    <div class="card-header bg-primary text-white">
+                        <h4 class="mb-0">Register New Drug</h4>
+                    </div>
+                    <div class="card-body">
+                        <form id="drugForm">
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-6">
+                                    <label class="form-label">Drug Code</label>
+                                    <input id="xdrugcode" type="text" class="form-control" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Drug Name</label>
+                                    <input id="xdrugname" type="text" class="form-control" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Dosage</label>
+                                    <input id="xdosage" type="text" class="form-control" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Side Effects</label>
+                                    <input id="xsideeffect" type="text" class="form-control" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Production Date</label>
+                                    <input id="xproddate" type="date" class="form-control" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Expiry Date</label>
+                                    <input id="xexpirydate" type="date" class="form-control" required>
+                                </div>
+                            </div>
+                            <div class="text-center">
+                                <button type="button" class="btn btn-primary btn-lg" onclick="registerDrug()">
+                                    Register Drug
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let web3;
+        let contract;
+        const contractAddress = "0xa708617e0ebdc98590a6f2ecb24ed4e52f07b8a7";
+const abi = [
+            {
+                "inputs": [
+                    {"internalType":"string","name":"_drugcode","type":"string"},
+                    {"internalType":"string","name":"_drugname","type":"string"},
+                    {"internalType":"string","name":"_dosage","type":"string"},
+                    {"internalType":"string","name":"_sideeffect","type":"string"},
+                    {"internalType":"string","name":"_proddate","type":"string"},
+                    {"internalType":"string","name":"_expirydate","type":"string"}
+                ],
+                "name":"addDrug",
+                "outputs":[],
+                "stateMutability":"nonpayable",
+                "type":"function"
+            },
+            {
+                "inputs":[{"internalType":"address","name":"_address","type":"address"}],
+                "name":"getCompany",
+                "outputs":[{"internalType":"string","name":"","type":"string"}],
+                "stateMutability":"view",
+                "type":"function"
+            }
+        ];
+
+        async function initWeb3() {
+            try {
+                if (window.ethereum) {
+                    web3 = new Web3(window.ethereum);
+                    await window.ethereum.enable();
+                    contract = new web3.eth.Contract(abi, contractAddress);
+                    return true;
+                }
+                showMessage("Please install MetaMask!", "danger");
+                return false;
+            } catch (error) {
+                showMessage(`Error connecting to wallet: ${error.message}`, "danger");
+                return false;
+            }
+        }
+
+        async function registerDrug() {
+            try {
+                document.getElementById("loading").style.display = "block";
+                
+                // Validate inputs
+                const inputs = {
+                    drugcode: document.getElementById("xdrugcode").value.trim(),
+                    drugname: document.getElementById("xdrugname").value.trim(),
+                    dosage: document.getElementById("xdosage").value.trim(),
+                    sideeffect: document.getElementById("xsideeffect").value.trim(),
+                    proddate: document.getElementById("xproddate").value.trim(),
+                    expirydate: document.getElementById("xexpirydate").value.trim()
+                };
+
+                // Check for empty fields
+                for (const [key, value] of Object.entries(inputs)) {
+                    if (!value) throw new Error(`Please fill in ${key.replace(/([A-Z])/g, ' $1').toLowerCase()}`);
+                }
+
+                // Get current account
+                const accounts = await web3.eth.getAccounts();
+                const currentAccount = accounts[0];
+
+                // Check company authorization
+                const companyName = await contract.methods.getCompany(currentAccount).call();
+                if (!companyName) throw new Error("Your account is not authorized to register drugs");
+
+                // Estimate gas with correct 6 parameters
+                const gasEstimate = await contract.methods.addDrug(
+                    inputs.drugcode,
+                    inputs.drugname,
+                    inputs.dosage,
+                    inputs.sideeffect,
+                    inputs.proddate,
+                    inputs.expirydate
+                ).estimateGas({ from: currentAccount });
+
+                // Send transaction with 6 parameters
+                const receipt = await contract.methods.addDrug(
+                    inputs.drugcode,
+                    inputs.drugname,
+                    inputs.dosage,
+                    inputs.sideeffect,
+                    inputs.proddate,
+                    inputs.expirydate
+                ).send({
+                    from: currentAccount,
+                    gas: Math.floor(gasEstimate * 1.2)
+                });
+
+                showMessage(`Drug registered successfully! TX Hash: ${receipt.transactionHash}`, "success");
+                document.getElementById("drugForm").reset();
+
+            } catch (error) {
+                showMessage(`Registration failed: ${error.message}`, "danger");
+                console.error(error);
+            } finally {
+                document.getElementById("loading").style.display = "none";
+            }
+        }
+
+        function showMessage(message, type = "info") {
+            const alertDiv = document.getElementById("metamask");
+            alertDiv.textContent = message;
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.style.display = "block";
+            
+            setTimeout(() => {
+                alertDiv.style.display = "none";
+            }, 5000);
+        }
+
+        // Initialize on load
+        window.addEventListener('load', async () => {
+            if (await initWeb3()) {
+                // Check authorization status
+                const accounts = await web3.eth.getAccounts();
+                try {
+                    const companyName = await contract.methods.getCompany(accounts[0]).call();
+                    if (!companyName) {
+                        showMessage("Unauthorized access. Only registered companies can add drugs.", "danger");
+                        document.querySelector("button").disabled = true;
+                    }
+                } catch (error) {
+                    showMessage("Error checking authorization status", "danger");
+                }
+            }
+        });
+    </script>
+</body>
+</html>
